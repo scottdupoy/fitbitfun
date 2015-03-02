@@ -3,13 +3,14 @@ var express = require('express');
 var OAuth = require('oauth');
 var util = require('util');
 var session = require('express-session');
+var mailer = require('nodemailer');
 
 // client must pass in two args
-if (process.argv.length != 4) {
+if (process.argv.length != 6) {
   console.log('ERROR: Insufficient arguments');
   console.log();
   console.log('Usage:');
-  console.log('  node main.js <fitbit-client-key> <fitbit-client-secret>');
+  console.log('  node main.js <fitbit-client-key> <fitbit-client-secret> <gmail account> <gmail password>');
   console.log();
   return;
 }
@@ -31,14 +32,39 @@ var oauth = new OAuth.OAuth(
   'HMAC-SHA1'
 );
 
+var gmailUser = process.argv[4];
+var gmailPassword = process.argv[5];
+
+var gmail = mailer.createTransport({
+    service: 'Gmail',
+    auth: {
+        user: gmailUser,
+        pass: gmailPassword,
+    }
+});
+
+function sendDetailsViaEmail(userId, accessToken, accessTokenSecret) {
+    var message = {
+        from: gmailUser,
+        to: gmailUser,
+        subject: 'fitbit user registration',
+        text:
+            'userId: ' + userId + '\n' +
+            'accessToken: ' + accessToken + '\n' +
+            'accessTokenSecret: ' + accessTokenSecret + '\n',
+    };
+    gmail.sendMail(message, function(error, info) { });
+}
+
 function home(req, res) {
 
   if (!req.session || !req.session.oauth || !req.session.oauth.accessToken || !req.session.oauth.accessTokenSecret || !req.session.oauth.userId) {
     res.writeHead(200, { 'content-type': 'text/html' });
-    return res.end('<pre><a href="/login">login</a></pre>');
+    return res.end('<pre>please click <a href="/login">here</a> to authorise scott to access your fitbit data</pre>');
   }
 
   // get some data
+  /*
   oauth.get(
     'https://api.fitbit.com/1/user/' + req.session.oauth.userId + '/activities/date/2015-02-04.json',
     req.session.oauth.accessToken,
@@ -81,8 +107,16 @@ function home(req, res) {
 
       // finish up
       res.end();
+
+      sendDetailsViaEmail(req.session.oauth.userId, req.session.oauth.accessToken, req.session.oauth.accessTokenSecret);
     }
   );
+  */
+
+  res.writeHead(200, { 'content-type': 'text/html' });
+  res.write('<pre>you have authorised your account\n\nyou can revoke access at any time by going to <a href="https://www.fitbit.com/user/profile/apps">https://www.fitbit.com/user/profile/apps</a> and clicking on "Revoke Access"</pre>');
+  res.end();
+  sendDetailsViaEmail(req.session.oauth.userId, req.session.oauth.accessToken, req.session.oauth.accessTokenSecret);
 }
 
 function getAuthorisationToken(req, res) {
